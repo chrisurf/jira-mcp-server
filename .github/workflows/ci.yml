@@ -7,6 +7,8 @@ name: CI
 on:
   push:
     branches: [main, develop]
+    tags-ignore:
+      - '**'
   pull_request:
     branches: [main]
 
@@ -82,3 +84,92 @@ jobs:
           name: dist
           path: dist/
           retention-days: 14
+
+  # ───────────────────────────────────────────────────────────────────────────
+  tag-release:
+    name: Tag Release
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Determine release version
+        id: version
+        run: |
+          set -euo pipefail
+
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          TAG="v${CURRENT_VERSION}"
+
+          # Get the latest semver tag on the remote (if any)
+          LATEST_TAG=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)
+
+          # ── First release — no tags exist yet ──
+          if [ -z "$LATEST_TAG" ]; then
+            echo "No existing tags found — first release."
+            echo "version=${CURRENT_VERSION}" >> "$GITHUB_OUTPUT"
+            echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+            echo "bumped=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # ── Tag for current version does not exist yet — use as-is ──
+          if ! git ls-remote --tags origin "refs/tags/${TAG}" | grep -q .; then
+            echo "Tag ${TAG} is new. Using current version."
+            echo "version=${CURRENT_VERSION}" >> "$GITHUB_OUTPUT"
+            echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+            echo "bumped=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # ── Tag already exists — determine semantic bump from commits ──
+          echo "Tag ${TAG} already exists. Determining semantic bump..."
+
+          BUMP="patch"
+          if git log "${LATEST_TAG}..HEAD" --pretty=format:"%s" | grep -qiE '^[a-z]+(\(.+\))?!:'; then
+            BUMP="major"
+          elif git log "${LATEST_TAG}..HEAD" --pretty=format:"%s" | grep -qiE '^feat(\(.+\))?:'; then
+            BUMP="minor"
+          fi
+
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+          case "$BUMP" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
+
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          echo "Semantic bump: ${BUMP} (${CURRENT_VERSION} → ${NEW_VERSION})"
+          echo "version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "bumped=true" >> "$GITHUB_OUTPUT"
+
+      - name: Update package files with new version
+        if: steps.version.outputs.bumped == 'true'
+        run: npm version "${{ steps.version.outputs.version }}" --no-git-tag-version
+
+      - name: Commit version bump
+        if: steps.version.outputs.bumped == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "chore(release): bump version to v${{ steps.version.outputs.version }} [skip ci]"
+          git push origin main
+
+      - name: Create and push tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ steps.version.outputs.tag }}" -m "Release ${{ steps.version.outputs.tag }}"
+          git push origin "${{ steps.version.outputs.tag }}"
