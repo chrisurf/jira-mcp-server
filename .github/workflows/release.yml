@@ -1,14 +1,16 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Release Pipeline — Semantic Versioning with automated CHANGELOG
 #
-# Workflow:
-#   1. Developer creates a GitHub Release (tag v1.2.3)
-#   2. Pipeline runs full CI (lint, test, build, security)
-#   3. Syncs version from tag into package.json
-#   4. Generates CHANGELOG from conventional commits
-#   5. Builds and pushes Docker image to GHCR
-#   6. Publishes npm package (optional, needs NPM_TOKEN secret)
-#   7. Updates the GitHub Release with generated release notes
+# Triggered by:
+#   - CI pipeline after successful build (workflow_call)
+#   - Manual tag push (v1.2.3)
+#   - Manual workflow dispatch
+#
+# Steps:
+#   1. Validates the release tag
+#   2. Builds and pushes Docker image to GHCR
+#   3. Publishes npm package (optional, needs NPM_TOKEN secret)
+#   4. Creates GitHub Release with generated release notes
 #
 # Tag format: v<major>.<minor>.<patch> (e.g. v1.0.0, v0.2.1)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -19,6 +21,11 @@ on:
   push:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
   workflow_dispatch:
     inputs:
       tag:
@@ -54,7 +61,7 @@ jobs:
       - name: Extract version from tag
         id: version
         run: |
-          # Support both tag push and workflow_dispatch triggers
+          # Support tag push, workflow_call, and workflow_dispatch triggers
           TAG="${{ inputs.tag || github.ref_name }}"
           VERSION="${TAG#v}"
           MAJOR_MINOR="$(echo "$VERSION" | cut -d. -f1-2)"
@@ -67,65 +74,23 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "ERROR: Tag '$GITHUB_REF_NAME' is not valid semver."
+            echo "ERROR: '${{ steps.version.outputs.tag }}' is not valid semver."
             echo "Expected format: v<major>.<minor>.<patch> (e.g. v1.0.0)"
             exit 1
           fi
 
   # ───────────────────────────────────────────────────────────────────────────
-  # Phase 2: CI checks (same as ci.yml but on the tagged commit)
-  # ───────────────────────────────────────────────────────────────────────────
-
-  lint-and-typecheck:
-    name: Lint & Type Check
-    runs-on: ubuntu-latest
-    needs: [validate]
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npm run lint
-
-  test:
-    name: Tests
-    runs-on: ubuntu-latest
-    needs: [lint-and-typecheck]
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-      - run: npm ci
-      - run: npm run test:coverage
-
-  security-audit:
-    name: Security Audit
-    runs-on: ubuntu-latest
-    needs: [validate]
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-      - run: npm ci
-      - run: npm audit --audit-level=high
-
-  # ───────────────────────────────────────────────────────────────────────────
-  # Phase 3: Build
+  # Phase 2: Build
   # ───────────────────────────────────────────────────────────────────────────
 
   build:
     name: Build & Package
     runs-on: ubuntu-latest
-    needs: [validate, test, security-audit]
+    needs: [validate]
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
       - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -140,14 +105,14 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v5
         with:
-          name: dist
+          name: release-dist
           path: |
             dist/
             package.json
             package-lock.json
 
   # ───────────────────────────────────────────────────────────────────────────
-  # Phase 4: Docker Image
+  # Phase 3: Docker Image
   # ───────────────────────────────────────────────────────────────────────────
 
   docker:
@@ -179,11 +144,10 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
+            type=raw,value=${{ needs.validate.outputs.version }}
+            type=raw,value=${{ needs.validate.outputs.major_minor }}
             type=sha,prefix=
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v7
@@ -194,7 +158,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
 
   # ───────────────────────────────────────────────────────────────────────────
-  # Phase 5: npm Publish (optional — only if NPM_TOKEN secret exists)
+  # Phase 4: npm Publish (optional — only if NPM_TOKEN secret exists)
   # ───────────────────────────────────────────────────────────────────────────
 
   publish-npm:
@@ -205,6 +169,8 @@ jobs:
     if: ${{ vars.PUBLISH_NPM == 'true' }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
       - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -221,18 +187,19 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   # ───────────────────────────────────────────────────────────────────────────
-  # Phase 6: GitHub Release Notes
+  # Phase 5: GitHub Release Notes
   # ───────────────────────────────────────────────────────────────────────────
 
   release-notes:
     name: Generate Release Notes
     runs-on: ubuntu-latest
-    needs: [docker, validate]
+    needs: [build, validate]
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v5
         with:
+          ref: ${{ inputs.tag || github.ref }}
           fetch-depth: 0
 
       - name: Generate changelog from commits
