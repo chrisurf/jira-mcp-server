@@ -19,6 +19,11 @@ on:
   push:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v1.0.0)'
+        required: true
 
 env:
   NODE_VERSION: '22'
@@ -40,17 +45,22 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       major_minor: ${{ steps.version.outputs.major_minor }}
+      tag: ${{ steps.version.outputs.tag }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Extract version from tag
         id: version
         run: |
-          TAG="${GITHUB_REF_NAME}"
+          # Support both tag push and workflow_dispatch triggers
+          TAG="${{ inputs.tag || github.ref_name }}"
           VERSION="${TAG#v}"
           MAJOR_MINOR="$(echo "$VERSION" | cut -d. -f1-2)"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "major_minor=$MAJOR_MINOR" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "Release version: $VERSION"
 
       - name: Validate semver format
@@ -230,7 +240,7 @@ jobs:
             COMPARE_NOTE="Initial release"
           else
             RANGE="${PREV_TAG}..HEAD"
-            COMPARE_NOTE="**Full diff:** [\`${PREV_TAG}..${GITHUB_REF_NAME}\`](https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${GITHUB_REF_NAME})"
+            COMPARE_NOTE="**Full diff:** [\`${PREV_TAG}..${{ needs.validate.outputs.tag }}\`](https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${{ needs.validate.outputs.tag }})"
           fi
 
           # Generate categorized changelog from conventional commits
@@ -289,5 +299,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           body: ${{ steps.changelog.outputs.CHANGELOG }}
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ needs.validate.outputs.tag }}
           generate_release_notes: false
