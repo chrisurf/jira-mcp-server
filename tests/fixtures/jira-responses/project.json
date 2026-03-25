@@ -1,0 +1,28 @@
+{
+  "startAt": 0,
+  "maxResults": 50,
+  "total": 2,
+  "values": [
+    {
+      "id": "10001",
+      "key": "DPSPPT",
+      "name": "DPSP Platform Team",
+      "projectTypeKey": "software",
+      "lead": {
+        "displayName": "Max Mustermann"
+      },
+      "description": "Digital Platform Services – Platform Team project"
+    },
+    {
+      "id": "10002",
+      "key": "INFRA",
+      "name": "Infrastructure",
+      "projectTypeKey": "software",
+      "lead": {
+        "displayName": "Erika Musterfrau"
+      },
+      "description": "Infrastructure and operations project"
+    }
+  ],
+  "isLast": true
+}

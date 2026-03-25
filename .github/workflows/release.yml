@@ -1,0 +1,293 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Release Pipeline — Semantic Versioning with automated CHANGELOG
+#
+# Workflow:
+#   1. Developer creates a GitHub Release (tag v1.2.3)
+#   2. Pipeline runs full CI (lint, test, build, security)
+#   3. Syncs version from tag into package.json
+#   4. Generates CHANGELOG from conventional commits
+#   5. Builds and pushes Docker image to GHCR
+#   6. Publishes npm package (optional, needs NPM_TOKEN secret)
+#   7. Updates the GitHub Release with generated release notes
+#
+# Tag format: v<major>.<minor>.<patch> (e.g. v1.0.0, v0.2.1)
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+env:
+  NODE_VERSION: '22'
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────────
+  # Phase 1: Validate
+  # ───────────────────────────────────────────────────────────────────────────
+
+  validate:
+    name: Validate Release Tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      major_minor: ${{ steps.version.outputs.major_minor }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          MAJOR_MINOR="$(echo "$VERSION" | cut -d. -f1-2)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "major_minor=$MAJOR_MINOR" >> "$GITHUB_OUTPUT"
+          echo "Release version: $VERSION"
+
+      - name: Validate semver format
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: Tag '$GITHUB_REF_NAME' is not valid semver."
+            echo "Expected format: v<major>.<minor>.<patch> (e.g. v1.0.0)"
+            exit 1
+          fi
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Phase 2: CI checks (same as ci.yml but on the tagged commit)
+  # ───────────────────────────────────────────────────────────────────────────
+
+  lint-and-typecheck:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    needs: [validate]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    needs: [lint-and-typecheck]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run test:coverage
+
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    needs: [validate]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+      - run: npm audit --audit-level=high
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Phase 3: Build
+  # ───────────────────────────────────────────────────────────────────────────
+
+  build:
+    name: Build & Package
+    runs-on: ubuntu-latest
+    needs: [validate, test, security-audit]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+
+      - name: Sync package.json version with tag
+        run: npm version "${{ needs.validate.outputs.version }}" --no-git-tag-version --allow-same-version
+
+      - run: npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: dist
+          path: |
+            dist/
+            package.json
+            package-lock.json
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Phase 4: Docker Image
+  # ───────────────────────────────────────────────────────────────────────────
+
+  docker:
+    name: Docker Build & Push
+    runs-on: ubuntu-latest
+    needs: [build, validate]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Sync package.json version
+        run: |
+          npm version "${{ needs.validate.outputs.version }}" --no-git-tag-version --allow-same-version
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,prefix=
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Phase 5: npm Publish (optional — only if NPM_TOKEN secret exists)
+  # ───────────────────────────────────────────────────────────────────────────
+
+  publish-npm:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    needs: [build, validate]
+    # Only runs if NPM_TOKEN is configured
+    if: ${{ vars.PUBLISH_NPM == 'true' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: 'https://registry.npmjs.org'
+
+      - run: npm ci
+
+      - name: Sync package.json version
+        run: npm version "${{ needs.validate.outputs.version }}" --no-git-tag-version --allow-same-version
+
+      - run: npm run build
+      - run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Phase 6: GitHub Release Notes
+  # ───────────────────────────────────────────────────────────────────────────
+
+  release-notes:
+    name: Generate Release Notes
+    runs-on: ubuntu-latest
+    needs: [docker, validate]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Generate changelog from commits
+        id: changelog
+        run: |
+          # Find the previous tag
+          PREV_TAG=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed -n '2p')
+
+          if [ -z "$PREV_TAG" ]; then
+            # First release — include all commits
+            RANGE="HEAD"
+            COMPARE_NOTE="Initial release"
+          else
+            RANGE="${PREV_TAG}..HEAD"
+            COMPARE_NOTE="**Full diff:** [\`${PREV_TAG}..${GITHUB_REF_NAME}\`](https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${GITHUB_REF_NAME})"
+          fi
+
+          # Generate categorized changelog from conventional commits
+          {
+            echo "CHANGELOG<<CHANGELOG_EOF"
+
+            echo "## What's Changed"
+            echo ""
+
+            # Breaking changes
+            BREAKING=$(git log "$RANGE" --pretty=format:"%s" 2>/dev/null | grep -iE '^[a-z]+(\(.+\))?!:' || true)
+            if [ -n "$BREAKING" ]; then
+              echo "### Breaking Changes"
+              echo "$BREAKING" | while IFS= read -r line; do echo "- $line"; done
+              echo ""
+            fi
+
+            # Features
+            FEATURES=$(git log "$RANGE" --pretty=format:"%s" 2>/dev/null | grep -iE '^feat(\(.+\))?:' || true)
+            if [ -n "$FEATURES" ]; then
+              echo "### Features"
+              echo "$FEATURES" | while IFS= read -r line; do echo "- $line"; done
+              echo ""
+            fi
+
+            # Bug fixes
+            FIXES=$(git log "$RANGE" --pretty=format:"%s" 2>/dev/null | grep -iE '^fix(\(.+\))?:' || true)
+            if [ -n "$FIXES" ]; then
+              echo "### Bug Fixes"
+              echo "$FIXES" | while IFS= read -r line; do echo "- $line"; done
+              echo ""
+            fi
+
+            # Other changes (perf, refactor, docs, chore, etc.)
+            OTHER=$(git log "$RANGE" --pretty=format:"%s" 2>/dev/null | grep -ivE '^(feat|fix)(\(.+\))?(!)?\:' | grep -vE '^\s*$' || true)
+            if [ -n "$OTHER" ]; then
+              echo "### Other Changes"
+              echo "$OTHER" | while IFS= read -r line; do echo "- $line"; done
+              echo ""
+            fi
+
+            echo "---"
+            echo ""
+            echo "$COMPARE_NOTE"
+            echo ""
+            echo "### Docker"
+            echo ""
+            echo '```bash'
+            echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.validate.outputs.version }}"
+            echo '```'
+
+            echo "CHANGELOG_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body: ${{ steps.changelog.outputs.CHANGELOG }}
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: false

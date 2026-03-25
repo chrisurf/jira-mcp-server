@@ -1,0 +1,91 @@
+{
+  "id": "12345",
+  "key": "DPSPPT-1549",
+  "self": "https://myorg.atlassian.net/rest/api/3/issue/12345",
+  "fields": {
+    "summary": "Evaluate IAM Identity Center Permission Set options",
+    "description": {
+      "version": 1,
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Evaluate different approaches for managing IAM Identity Center Permission Sets via Terraform."
+            }
+          ]
+        }
+      ]
+    },
+    "status": {
+      "name": "In Progress",
+      "statusCategory": {
+        "name": "In Progress",
+        "key": "indeterminate"
+      }
+    },
+    "issuetype": {
+      "name": "Story"
+    },
+    "priority": {
+      "name": "Medium"
+    },
+    "assignee": {
+      "displayName": "Max Mustermann"
+    },
+    "reporter": {
+      "displayName": "Erika Musterfrau"
+    },
+    "labels": ["landing-zone", "identity-center"],
+    "components": [
+      { "name": "IAM" }
+    ],
+    "fixVersions": [
+      { "name": "2026-Q1" }
+    ],
+    "created": "2026-02-15T10:30:00.000+0100",
+    "updated": "2026-03-10T14:22:00.000+0100",
+    "duedate": "2026-03-31",
+    "parent": {
+      "key": "DPSPPT-1500"
+    },
+    "subtasks": [
+      {
+        "key": "DPSPPT-1550",
+        "fields": {
+          "summary": "Research AWS SSO Permission Set API",
+          "status": { "name": "Done" }
+        }
+      },
+      {
+        "key": "DPSPPT-1551",
+        "fields": {
+          "summary": "POC: Terraform aws_ssoadmin_permission_set",
+          "status": { "name": "In Progress" }
+        }
+      }
+    ],
+    "issuelinks": [
+      {
+        "type": {
+          "name": "Blocks",
+          "inward": "is blocked by",
+          "outward": "blocks"
+        },
+        "outwardIssue": {
+          "key": "DPSPPT-1600",
+          "fields": {
+            "summary": "Implement Permission Set Terraform module",
+            "status": { "name": "To Do" }
+          }
+        }
+      }
+    ],
+    "comment": {
+      "total": 3
+    },
+    "customfield_10016": 5
+  }
+}

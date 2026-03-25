@@ -1,0 +1,10 @@
+{
+  "allowed_tools": [],
+  "blocked_tools": [],
+  "project_keys": [],
+  "cache": {
+    "enabled": true,
+    "ttl_seconds": 300,
+    "max_entries": 1000
+  }
+}

@@ -1,0 +1,19 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Environment files (keep .env.example)
+.env
+.env.*
+!.env.example
+
+# Local Claude Code config (not committed)
+*.local.md
+
+# OS
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*

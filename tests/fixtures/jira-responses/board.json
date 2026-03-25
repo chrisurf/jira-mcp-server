@@ -1,0 +1,18 @@
+{
+  "startAt": 0,
+  "maxResults": 50,
+  "total": 2,
+  "values": [
+    {
+      "id": 1,
+      "name": "DPSPPT Scrum Board",
+      "type": "scrum"
+    },
+    {
+      "id": 2,
+      "name": "INFRA Kanban Board",
+      "type": "kanban"
+    }
+  ],
+  "isLast": true
+}

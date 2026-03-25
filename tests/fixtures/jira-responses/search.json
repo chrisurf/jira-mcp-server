@@ -1,0 +1,69 @@
+{
+  "startAt": 0,
+  "maxResults": 50,
+  "total": 2,
+  "issues": [
+    {
+      "id": "12345",
+      "key": "DPSPPT-1549",
+      "self": "https://myorg.atlassian.net/rest/api/3/issue/12345",
+      "fields": {
+        "summary": "Evaluate IAM Identity Center Permission Set options",
+        "description": null,
+        "status": {
+          "name": "In Progress",
+          "statusCategory": {
+            "name": "In Progress",
+            "key": "indeterminate"
+          }
+        },
+        "issuetype": { "name": "Story" },
+        "priority": { "name": "Medium" },
+        "assignee": { "displayName": "Max Mustermann" },
+        "reporter": { "displayName": "Erika Musterfrau" },
+        "labels": ["landing-zone"],
+        "components": [],
+        "fixVersions": [],
+        "created": "2026-02-15T10:30:00.000+0100",
+        "updated": "2026-03-10T14:22:00.000+0100",
+        "duedate": null,
+        "parent": null,
+        "subtasks": [],
+        "issuelinks": [],
+        "comment": { "total": 0 },
+        "customfield_10016": 5
+      }
+    },
+    {
+      "id": "12346",
+      "key": "DPSPPT-1550",
+      "self": "https://myorg.atlassian.net/rest/api/3/issue/12346",
+      "fields": {
+        "summary": "Research AWS SSO Permission Set API",
+        "description": null,
+        "status": {
+          "name": "Done",
+          "statusCategory": {
+            "name": "Done",
+            "key": "done"
+          }
+        },
+        "issuetype": { "name": "Subtask" },
+        "priority": { "name": "Low" },
+        "assignee": { "displayName": "Max Mustermann" },
+        "reporter": { "displayName": "Erika Musterfrau" },
+        "labels": [],
+        "components": [],
+        "fixVersions": [],
+        "created": "2026-02-16T09:00:00.000+0100",
+        "updated": "2026-03-05T11:00:00.000+0100",
+        "duedate": null,
+        "parent": { "key": "DPSPPT-1549" },
+        "subtasks": [],
+        "issuelinks": [],
+        "comment": { "total": 1 },
+        "customfield_10016": 2
+      }
+    }
+  ]
+}

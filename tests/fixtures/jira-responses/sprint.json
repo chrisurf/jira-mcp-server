@@ -1,0 +1,32 @@
+{
+  "startAt": 0,
+  "maxResults": 50,
+  "total": 3,
+  "values": [
+    {
+      "id": 101,
+      "name": "Sprint 2026-03",
+      "goal": "Complete IAM Identity Center evaluation and POC",
+      "state": "active",
+      "startDate": "2026-03-01T00:00:00.000+0100",
+      "endDate": "2026-03-31T23:59:59.000+0200"
+    },
+    {
+      "id": 100,
+      "name": "Sprint 2026-02",
+      "goal": "Landing Zone foundation and networking evaluation",
+      "state": "closed",
+      "startDate": "2026-02-01T00:00:00.000+0100",
+      "endDate": "2026-02-28T23:59:59.000+0100"
+    },
+    {
+      "id": 102,
+      "name": "Sprint 2026-04",
+      "goal": null,
+      "state": "future",
+      "startDate": null,
+      "endDate": null
+    }
+  ],
+  "isLast": true
+}
