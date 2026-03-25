@@ -1,6 +1,6 @@
 {
   "name": "jira-mcp-server",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Read-only Jira Cloud MCP server for AI agents",
   "type": "module",
   "main": "dist/server.js",
@@ -21,7 +21,12 @@
     "format:check": "prettier --check 'src/**/*.ts' 'tests/**/*.ts'",
     "validate-config": "tsx scripts/validate-config.ts"
   },
-  "keywords": ["mcp", "jira", "claude", "ai-agent"],
+  "keywords": [
+    "mcp",
+    "jira",
+    "claude",
+    "ai-agent"
+  ],
   "license": "MIT",
   "engines": {
     "node": ">=20.0.0"
