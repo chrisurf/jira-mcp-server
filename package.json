@@ -1,6 +1,6 @@
 {
   "name": "jira-mcp-server",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Read-only Jira Cloud MCP server for AI agents",
   "type": "module",
   "main": "dist/server.js",
