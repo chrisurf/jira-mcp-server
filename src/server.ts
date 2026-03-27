@@ -9,6 +9,9 @@
  * Security: Credentials are NEVER logged.
  */
 
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { loadConfig } from "./config/loader.js";
@@ -23,9 +26,13 @@ import { registerSprintTools } from "./tools/sprints.js";
 import { registerIssueDetailTools } from "./tools/issue-details.js";
 import type { ToolDescription } from "./tools/admin.js";
 
-// Package metadata — read version at build time.
-const SERVER_NAME = "jira-mcp-server";
-const SERVER_VERSION = "0.2.0";
+// Package metadata — read version from package.json at runtime.
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(
+  readFileSync(resolve(__dirname, "..", "package.json"), "utf-8"),
+);
+const SERVER_NAME: string = pkg.name;
+const SERVER_VERSION: string = pkg.version;
 
 // ---------------------------------------------------------------------------
 // Bootstrap
