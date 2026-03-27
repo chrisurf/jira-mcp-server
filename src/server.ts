@@ -46,7 +46,7 @@ async function main(): Promise<void> {
   try {
     healthy = await jiraClient.validateConnection();
   } catch {
-    healthy = false;
+    // healthy remains false
   }
 
   if (healthy) {
